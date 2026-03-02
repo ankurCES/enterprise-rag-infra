@@ -1,0 +1,8 @@
+smbprotocol
+pypdf
+docx2txt
+langchain-text-splitters
+litellm
+qdrant-client
+python-dotenv
+cryptography
