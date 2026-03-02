@@ -1,0 +1,82 @@
+version: '3.8'
+
+services:
+  # Frontend: React (Vite) served via Nginx
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "80:80"
+    env_file: .env
+    depends_on:
+      - backend
+
+  # Backend: FastAPI
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    env_file: .env
+    depends_on:
+      - db
+      - qdrant
+      - litellm
+
+  # Worker: Python for SMB Polling & Vectorization
+  worker:
+    build:
+      context: ./worker
+      dockerfile: Dockerfile
+    env_file: .env
+    volumes:
+      - smb_share:/app/data/engineering_docs:ro
+    depends_on:
+      - qdrant
+      - db
+      - litellm
+
+  # Vector Database: Qdrant
+  qdrant:
+    image: qdrant/qdrant:latest
+    ports:
+      - "6333:6333"
+    volumes:
+      - qdrant_storage:/qdrant/storage
+
+  # Relational Database: PostgreSQL for Chat Session History
+  db:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-password}
+      POSTGRES_DB: ${POSTGRES_DB:-chat_history}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+
+  # LiteLLM: Routing & Proxy
+  litellm:
+    image: ghcr.io/berriai/litellm:main-latest
+    ports:
+      - "4000:4000"
+    env_file: .env
+    command: ["--model", "${LITELLM_MODEL:-gpt-4}"]
+
+volumes:
+  qdrant_storage:
+  postgres_data:
+  # External Windows SMB Share using the CIFS driver
+  smb_share:
+    driver: local
+    driver_opts:
+      type: cifs
+      device: "${SMB_SHARE_PATH}"
+      o: "username=${SMB_USERNAME},password=${SMB_PASSWORD},domain=${SMB_DOMAIN},ro"
+
+networks:
+  default:
+    name: rag-network
